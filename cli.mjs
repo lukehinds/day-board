@@ -14,13 +14,14 @@ const HELP = `Usage: board [command] [args]
   board add <text>          add to the top of the quick list
   board focus <text>        add a new item straight into the first free focus slot
   board focus <ref>         move an existing item into the first free focus slot
+  board delegate <name> <text>   hand an item to someone (shown under "Waiting on others")
   board unfocus <ref>       move a focus item back to the top of the list
   board done <ref...>       mark done
   board undo <ref...>       mark not done
   board rm <ref...>         delete
   board clear               delete all done items from the list
 
-Refs: f1 f2 f3 are the focus slots; 1, 2, 3... are positions in the quick list.
+Refs: f1 f2 f3 are the focus slots; 1, 2, 3... are positions in the quick list; w1, w2... are items waiting on others.
 Set BOARD_URL to point at your server (default ${BASE}).`;
 
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
@@ -34,6 +35,7 @@ async function load() {
     if (!r.ok) fail(`Server returned HTTP ${r.status}`);
     b = await r.json();
   } catch (e) { fail(`Cannot reach ${BASE} (${e.cause?.code || e.message}). Set BOARD_URL?`); }
+  b.waiting ||= []; b.people ||= [];
   let changed = false;
   if (!b.day) { b.day = today(); changed = true; }
   else if (b.day !== today()) { // same new-day rule as the web page
@@ -42,6 +44,7 @@ async function load() {
     b.list = back.concat(b.list);
     for (const id of Object.keys(b.items)) if (b.items[id].d) delete b.items[id];
     b.list = b.list.filter((id) => b.items[id]);
+    b.waiting = b.waiting.filter((id) => b.items[id]);
     b.day = today(); changed = true;
   }
   return { b, changed };
@@ -55,11 +58,13 @@ async function save(b) {
 function resolve(b, ref) {
   const m = /^f([1-3])$/i.exec(ref);
   if (m) { const id = b.focus[m[1] - 1]; if (!id) fail(`Focus slot ${ref} is empty.`); return id; }
+  const w = /^w(\d+)$/i.exec(ref);
+  if (w) { const id = b.waiting[Number(w[1]) - 1]; if (!id) fail(`No waiting item ${ref}.`); return id; }
   if (/^\d+$/.test(ref)) { const id = b.list[Number(ref) - 1]; if (!id) fail(`No list item ${ref}.`); return id; }
-  return fail(`Bad ref "${ref}". Use f1-f3 or a list number.`);
+  return fail(`Bad ref "${ref}". Use f1-f3, w1.., or a list number.`);
 }
-const isRef = (s) => /^(f\d+|\d+)$/i.test(s); // f4 etc. count as refs so typos error instead of becoming tasks
-const remove = (b, id) => { b.focus = b.focus.map((x) => (x === id ? null : x)); b.list = b.list.filter((x) => x !== id); };
+const isRef = (s) => /^(f\d+|w\d+|\d+)$/i.test(s); // f4 etc. count as refs so typos error instead of becoming tasks
+const remove = (b, id) => { b.focus = b.focus.map((x) => (x === id ? null : x)); b.list = b.list.filter((x) => x !== id); b.waiting = b.waiting.filter((x) => x !== id); };
 
 function show(b) {
   const box = (id) => (b.items[id].d ? green("[x]") : "[ ]");
@@ -72,6 +77,10 @@ function show(b) {
   console.log(`\n${bold(`Quick list`)} ${dim(`(${open} open)`)}`);
   if (!b.list.length) console.log(dim("  (nothing here)"));
   b.list.forEach((id, i) => console.log(`  ${dim(String(i + 1).padStart(2))}  ${box(id)} ${txt(id)}`));
+  const wopen = b.waiting.filter((id) => !b.items[id].d).length;
+  console.log(`\n${bold("Waiting on others")} ${dim(`(${wopen} open)`)}`);
+  if (!b.waiting.length) console.log(dim("  (nothing handed off)"));
+  b.waiting.forEach((id, i) => console.log(`  ${dim("w" + (i + 1))}  ${box(id)} ${txt(id)} ${dim("· " + b.items[id].w)}`));
 }
 
 const [cmd = "status", ...args] = process.argv.slice(2);
@@ -97,6 +106,13 @@ switch (cmd) {
       const id = uid(); b.items[id] = { t, d: false }; b.focus[slot] = id;
     }
     dirty = true; show(b); break;
+  }
+  case "delegate": case "give": {
+    let who = args[0], t = args.slice(1).join(" ").trim();
+    if (!who || !t) fail('Usage: board delegate <name> <text>   (quote multi-word names: board delegate "Sam Lee" call back)');
+    who = b.people.find((n) => n.toLowerCase() === who.toLowerCase()) || who;
+    if (!b.people.includes(who)) b.people.push(who);
+    const id = uid(); b.items[id] = { t, d: false, w: who }; b.waiting.unshift(id); dirty = true; show(b); break;
   }
   case "unfocus": {
     if (!args.length) fail("unfocus which slot? (f1-f3)");

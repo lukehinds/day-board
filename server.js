@@ -21,27 +21,43 @@ db.exec(`
     pos  INTEGER NOT NULL    -- order within the quick list
   );
   CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+  CREATE TABLE IF NOT EXISTS people (name TEXT PRIMARY KEY COLLATE NOCASE); -- names offered as autocomplete
 `);
+// Older databases: add the column that marks an item as handed to someone.
+if (!db.prepare("PRAGMA table_info(tasks)").all().some((c) => c.name === "who"))
+  db.exec("ALTER TABLE tasks ADD COLUMN who TEXT");
 
 const readBoard = () => {
   const day = db.prepare("SELECT value FROM meta WHERE key='day'").get()?.value ?? null;
   const rows = db.prepare("SELECT * FROM tasks ORDER BY pos").all();
-  const items = {}, focus = [null, null, null], list = [];
+  const items = {}, focus = [null, null, null], list = [], waiting = [];
   for (const r of rows) {
     items[r.id] = { t: r.text, d: !!r.done };
-    if (r.slot !== null && r.slot >= 0 && r.slot < 3) focus[r.slot] = r.id;
+    if (r.who) { items[r.id].w = r.who; waiting.push(r.id); }
+    else if (r.slot !== null && r.slot >= 0 && r.slot < 3) focus[r.slot] = r.id;
     else list.push(r.id);
   }
-  return { day, items, focus, list };
+  const people = db.prepare("SELECT name FROM people ORDER BY name COLLATE NOCASE").all().map((r) => r.name);
+  return { day, items, focus, list, waiting, people };
 };
 
+const clean = (v, n) => String(v).trim().slice(0, n);
+
 const writeBoard = (b) => {
-  const ins = db.prepare("INSERT INTO tasks (id,text,done,slot,pos) VALUES (?,?,?,?,?)");
+  const ins = db.prepare("INSERT INTO tasks (id,text,done,slot,pos,who) VALUES (?,?,?,?,?,?)");
+  const addPerson = db.prepare("INSERT OR IGNORE INTO people (name) VALUES (?)");
+  const row = (id, slot, pos, who) => ins.run(id, clean(b.items[id].t, 500), b.items[id].d ? 1 : 0, slot, pos, who);
   db.exec("BEGIN");
   try {
-    db.exec("DELETE FROM tasks");
-    b.focus.forEach((id, i) => { if (id && b.items[id]) ins.run(id, String(b.items[id].t).slice(0, 500), b.items[id].d ? 1 : 0, i, 0); });
-    b.list.forEach((id, i) => { if (b.items[id]) ins.run(id, String(b.items[id].t).slice(0, 500), b.items[id].d ? 1 : 0, null, i); });
+    if (Array.isArray(b.waiting)) db.exec("DELETE FROM tasks");
+    else db.exec("DELETE FROM tasks WHERE who IS NULL"); // an older page that doesn't know about waiting items must not wipe them
+    b.focus.forEach((id, i) => { if (id && b.items[id]) row(id, i, 0, null); });
+    b.list.forEach((id, i) => { if (b.items[id]) row(id, null, i, null); });
+    (b.waiting || []).forEach((id, i) => {
+      const who = b.items[id] && b.items[id].w ? clean(b.items[id].w, 80) : "";
+      if (who) { row(id, null, i, who); addPerson.run(who); }
+    });
+    (Array.isArray(b.people) ? b.people : []).slice(0, 500).forEach((n) => { const v = clean(n, 80); if (v) addPerson.run(v); });
     db.prepare("INSERT INTO meta (key,value) VALUES ('day',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(String(b.day));
     db.exec("COMMIT");
   } catch (e) { db.exec("ROLLBACK"); throw e; }
@@ -54,6 +70,10 @@ app.put("/api/board", async (c) => {
   if (!b || typeof b.items !== "object" || !Array.isArray(b.focus) || !Array.isArray(b.list) || !b.day)
     { console.error("rejected board:", JSON.stringify(b)?.slice(0, 300)); return c.json({ error: "bad board" }, 400); }
   try { writeBoard(b); } catch (e) { console.error("write failed:", e.message); return c.json({ error: e.message }, 500); }
+  return c.json({ ok: true });
+});
+app.delete("/api/people/:name", (c) => {
+  db.prepare("DELETE FROM people WHERE name = ?").run(c.req.param("name"));
   return c.json({ ok: true });
 });
 app.use("/*", serveStatic({ root: "./public" }));

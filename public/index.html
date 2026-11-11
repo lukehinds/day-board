@@ -67,6 +67,26 @@ h2{font:600 12px/1 var(--body);text-transform:uppercase;letter-spacing:.09em;col
 .link{border:0;background:none;color:var(--muted);font:inherit;font-size:13px;cursor:pointer;padding:4px 6px;border-radius:6px}
 .link:hover{color:var(--ink);background:var(--slot)}
 .hint{margin-top:28px;color:var(--muted);font-size:13px}
+.deleg-sec{margin-top:40px}
+.deleg-add{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,200px) auto;gap:8px;margin-bottom:12px}
+@media(max-width:640px){.deleg-add{grid-template-columns:1fr 1fr}.deleg-add .btn{grid-column:1/-1}}
+.deleg-add input,.deleg-add .btn{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;box-shadow:var(--shadow);min-width:0;width:100%}
+.deleg-add input:focus{outline:2px solid var(--accent);outline-offset:1px}
+.deleg-add input::placeholder{color:var(--muted)}
+.deleg-add .btn{width:auto;cursor:pointer;background:var(--accent);border-color:var(--accent);color:var(--surface);font-weight:600}
+.deleg-add .btn:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.ac{position:relative;min-width:0}
+.ac ul{position:absolute;z-index:30;left:0;right:0;top:calc(100% + 4px);margin:0;padding:4px;list-style:none;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--lift);max-height:220px;overflow:auto}
+.ac li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer}
+.ac li.on{background:var(--slot)}
+.ac li .rm{border:0;background:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0 4px;border-radius:6px;opacity:0}
+.ac li:hover .rm,.ac li.on .rm{opacity:1}
+.ac li .rm:hover{color:var(--ink)}
+.ac .tabhint{color:var(--muted);font-size:11px;border:1px solid var(--line);border-radius:5px;padding:0 5px}
+.card.deleg{cursor:default}
+.chip{flex:none;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px}
+.card.done .chip{opacity:.6}
+#waiting:empty::after{content:"Nothing handed off. Add something above.";color:var(--muted);padding:16px;text-align:center;border:1.5px dashed var(--line);border-radius:12px}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 <script>
@@ -95,7 +115,20 @@ try{if(localStorage.getItem("day-board-theme")==="dark")document.documentElement
     <div class="list" id="list"></div>
   </section>
 
-  <p class="hint">Drag cards between the focus slots and the list. Double-click a card to edit it.</p>
+  <section class="deleg-sec" id="delegSec">
+    <div class="sec-head"><h2 id="waitTitle">Waiting on others</h2></div>
+    <form class="deleg-add" id="delegForm" autocomplete="off">
+      <input id="delegText" type="text" placeholder="What did you hand off?" aria-label="Handed-off item">
+      <div class="ac">
+        <input id="delegWho" type="text" placeholder="Who?" aria-label="Person" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="acList" autocomplete="off">
+        <ul id="acList" role="listbox" hidden></ul>
+      </div>
+      <button class="btn" type="submit">Add</button>
+    </form>
+    <div class="list" id="waiting"></div>
+  </section>
+
+  <p class="hint">Drag cards between the focus slots and the list. Double-click a card to edit it. Names you hand work to are saved, press Tab to complete one.</p>
 </main>
 
 <script>
@@ -120,17 +153,20 @@ try{if(localStorage.getItem("day-board-theme")==="dark")document.documentElement
   function seed(){
     var items={}, mk=function(t){var id=uid();items[id]={t:t,d:false};return id};
     var f=mk("Finish the draft proposal");
-    return {items:items,focus:[f,null,null],list:[mk("Reply to Sam about Thursday"),mk("Book dentist"),mk("Pay the water invoice"),mk("Water the plants")]};
+    var wid=mk("Send over the signed contract");items[wid].w="Sam";
+    return {items:items,focus:[f,null,null],waiting:[wid],people:["Sam"],list:[mk("Reply to Sam about Thursday"),mk("Book dentist"),mk("Pay the water invoice"),mk("Water the plants")]};
   }
   function valid(s){return s&&s.items&&Array.isArray(s.focus)&&Array.isArray(s.list)}
   function normalise(s){
-    var f=[0,1,2].map(function(i){var id=s.focus[i];return id&&s.items[id]?id:null});
-    var seen={};f.forEach(function(id){if(id)seen[id]=1});
-    var l=s.list.filter(function(id){if(!s.items[id]||seen[id])return false;seen[id]=1;return true});
-    Object.keys(s.items).forEach(function(id){if(!seen[id])l.push(id)});
-    return {items:s.items,focus:f,list:l};
+    var items=s.items,seen={};
+    var w=(Array.isArray(s.waiting)?s.waiting:[]).filter(function(id){return items[id]&&!seen[id]&&(seen[id]=1)});
+    var f=[0,1,2].map(function(i){var id=s.focus[i];return id&&items[id]&&!seen[id]?id:null});
+    f.forEach(function(id){if(id)seen[id]=1});
+    var l=s.list.filter(function(id){if(!items[id]||seen[id])return false;seen[id]=1;return true});
+    Object.keys(items).forEach(function(id){if(!seen[id])l.push(id)});
+    return {day:s.day,items:items,focus:f,list:l,waiting:w,people:Array.isArray(s.people)?s.people.slice():[]};
   }
-  var S={items:{},focus:[null,null,null],list:[],day:null};
+  var S={items:{},focus:[null,null,null],list:[],waiting:[],people:[],day:null};
 
   function today(){var d=new Date();return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate()}
   function setDate(){$("#date").textContent=new Date().toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long"})}
@@ -146,6 +182,7 @@ try{if(localStorage.getItem("day-board-theme")==="dark")document.documentElement
       S.focus=[null,null,null];
       S.list=back.concat(S.list);
       Object.keys(S.items).forEach(function(id){if(S.items[id].d)delete S.items[id]});
+      S.waiting=S.waiting.filter(function(id){return S.items[id]});
       S.list=S.list.filter(function(id){return S.items[id]});
     }
     save();return !first;
@@ -206,6 +243,9 @@ try{if(localStorage.getItem("day-board-theme")==="dark")document.documentElement
       el.replaceChildren(id?cardEl(view,id):emptyEl(i));
     });
     listEl.replaceChildren.apply(listEl,view.list.map(function(id){return cardEl(view,id)}));
+    waitEl.replaceChildren.apply(waitEl,(view.waiting||[]).map(function(id){return delegEl(view,id)}));
+    var wopen=(view.waiting||[]).filter(function(id){return !view.items[id].d}).length;
+    $("#waitTitle").textContent="Waiting on others \u00b7 "+wopen;
     if(drag&&drag.started){var ph=document.querySelector('[data-id="'+drag.id+'"]');if(ph)ph.classList.add("ph")}
 
     document.querySelectorAll("[data-id]").forEach(function(e){
@@ -229,7 +269,7 @@ try{if(localStorage.getItem("day-board-theme")==="dark")document.documentElement
 
   /* ---------- drag and drop ---------- */
   function place(s,id,t){
-    var n={day:s.day,items:s.items,focus:s.focus.slice(),list:s.list.slice()};
+    var n=Object.assign({},s,{focus:s.focus.slice(),list:s.list.slice()});
     var fi=n.focus.indexOf(id),li=n.list.indexOf(id);
     if(t.k==="slot"){
       var occ=n.focus[t.i];if(occ===id)return n;
@@ -263,7 +303,7 @@ try{if(localStorage.getItem("day-board-theme")==="dark")document.documentElement
   document.addEventListener("pointerdown",function(e){
     if(e.button>0)return;
     var card=e.target.closest&&e.target.closest(".card");
-    if(!card||card.classList.contains("ghost")||card.classList.contains("editing"))return;
+    if(!card||card.classList.contains("ghost")||card.classList.contains("editing")||card.classList.contains("deleg"))return;
     if(e.target.closest(".chk,.del"))return;
     if(e.pointerType==="touch"&&!e.target.closest(".grip"))return;
     drag={id:card.dataset.id,sx:e.clientX,sy:e.clientY,pid:e.pointerId,started:false,target:null,card:card};
@@ -313,7 +353,7 @@ try{if(localStorage.getItem("day-board-theme")==="dark")document.documentElement
     var id=card.dataset.id;
     if(e.target.closest(".chk")){S.items[id].d=!S.items[id].d;save();render()}
     else if(e.target.closest(".del")){
-      delete S.items[id];S.focus=S.focus.map(function(x){return x===id?null:x});S.list=S.list.filter(function(x){return x!==id});save();render();
+      delete S.items[id];S.focus=S.focus.map(function(x){return x===id?null:x});S.list=S.list.filter(function(x){return x!==id});S.waiting=S.waiting.filter(function(x){return x!==id});save();render();
     }
   });
   document.addEventListener("dblclick",function(e){
@@ -341,6 +381,77 @@ try{if(localStorage.getItem("day-board-theme")==="dark")document.documentElement
   $("#clear").addEventListener("click",function(){
     S.list.filter(function(id){return S.items[id].d}).forEach(function(id){delete S.items[id]});
     S.list=S.list.filter(function(id){return S.items[id]});save();render();
+  });
+
+  /* ---------- waiting on others ---------- */
+  var waitEl=$("#waiting"), whoEl=$("#delegWho"), textEl=$("#delegText"), acEl=$("#acList");
+  function delegEl(view,id){
+    var it=view.items[id];
+    var c=document.createElement("div");
+    c.className="card deleg"+(it.d?" done":"");
+    c.dataset.id=id;
+    c.innerHTML='<button class="chk" type="button" aria-label="Toggle done"></button><span class="txt"></span><span class="chip"></span><button class="del" type="button" aria-label="Delete item">\u00d7</button>';
+    c.querySelector(".txt").textContent=it.t;
+    c.querySelector(".chip").textContent=it.w||"";
+    return c;
+  }
+  function canon(name){
+    var low=name.toLowerCase();
+    for(var i=0;i<S.people.length;i++)if(S.people[i].toLowerCase()===low)return S.people[i];
+    return name;
+  }
+  var acItems=[], acIdx=0, acPicked=false;
+  function acShow(){
+    var v=whoEl.value.trim().toLowerCase();
+    acItems=S.people.filter(function(n){var l=n.toLowerCase();return l!==v&&(!v||l.indexOf(v)===0)});
+    if(acIdx>=acItems.length)acIdx=0;
+    acEl.replaceChildren.apply(acEl,acItems.map(function(n,i){
+      var li=document.createElement("li");li.setAttribute("role","option");
+      if(i===acIdx)li.className="on";
+      var sp=document.createElement("span");sp.textContent=n;li.appendChild(sp);
+      var rm=document.createElement("button");rm.type="button";rm.className="rm";rm.textContent="\u00d7";rm.title="Forget this name";rm.tabIndex=-1;
+      rm.addEventListener("mousedown",function(e){e.preventDefault();e.stopPropagation();forget(n)});
+      li.appendChild(rm);
+      li.addEventListener("mousedown",function(e){e.preventDefault();pick(n)});
+      return li;
+    }));
+    var open=acItems.length>0&&document.activeElement===whoEl;
+    acEl.hidden=!open;whoEl.setAttribute("aria-expanded",open?"true":"false");
+  }
+  function acHide(){acEl.hidden=true;whoEl.setAttribute("aria-expanded","false");acPicked=false}
+  function pick(n){whoEl.value=n;acHide();acIdx=0}
+  function forget(n){
+    S.people=S.people.filter(function(x){return x!==n});
+    fetch("/api/people/"+encodeURIComponent(n),{method:"DELETE"}).catch(function(){});
+    acShow();
+  }
+  whoEl.addEventListener("focus",function(){acIdx=0;acPicked=false;acShow()});
+  whoEl.addEventListener("input",function(){acIdx=0;acPicked=false;acShow()});
+  whoEl.addEventListener("blur",acHide);
+  whoEl.addEventListener("keydown",function(e){
+    var open=!acEl.hidden&&acItems.length>0;
+    if(e.key==="ArrowDown"||e.key==="ArrowUp"){
+      if(!acItems.length)return;
+      e.preventDefault();acPicked=true;
+      acIdx=(acIdx+(e.key==="ArrowDown"?1:-1)+acItems.length)%acItems.length;acShow();
+    }else if(e.key==="Tab"&&!e.shiftKey&&open&&(whoEl.value.trim()||acPicked)){
+      e.preventDefault();pick(acItems[acIdx]);
+    }else if(e.key==="Enter"&&open&&acPicked){
+      e.preventDefault();pick(acItems[acIdx]);
+    }else if(e.key==="Escape"){acHide()}
+  });
+  textEl.addEventListener("keydown",function(e){
+    if(e.key==="Enter"&&textEl.value.trim()&&!whoEl.value.trim()){e.preventDefault();whoEl.focus()}
+  });
+  $("#delegForm").addEventListener("submit",function(e){
+    e.preventDefault();
+    var t=textEl.value.trim(),w=whoEl.value.trim();
+    if(!t){textEl.focus();return}
+    if(!w){whoEl.focus();return}
+    w=canon(w);
+    if(S.people.indexOf(w)<0)S.people=S.people.concat(w).sort(function(a,b){return a.localeCompare(b)});
+    var id=uid();S.items[id]={t:t,d:false,w:w};S.waiting.unshift(id);
+    textEl.value="";whoEl.value="";acHide();save();render();textEl.focus();
   });
 
   async function load(){

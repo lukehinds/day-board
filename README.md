@@ -4,6 +4,10 @@ A small todo tracker: three focus slots for today, a quick-capture list undernea
 
 On the first load of each new day, ticked-off cards are cleared and unfinished focus cards move to the top of the quick list.
 
+## Waiting on others
+
+The second section tracks things you have handed to other people. Type the item, then a name. Names are saved in the database and offered as suggestions next time: start typing and press Tab to complete, or use the arrow keys to pick another match (the × next to a suggestion forgets that name). Handed-off items are not draggable; they stay until you tick or delete them. Done ones are cleared on the next new day, like the rest.
+
 ## Run locally
 
 Needs Node 22.13 or newer.
@@ -82,6 +86,7 @@ board focus "Ship it"  new item straight into the first free focus slot
 board focus 2          move list item 2 into the first free focus slot
 board done f1 3        mark focus slot 1 and list item 3 done
 board unfocus f2       send a focus item back to the list
+board delegate Sam "Send the quote"   hand an item to Sam (refs w1, w2.. in done/rm)
 board rm 4             delete        (also: undo, clear, status --json)
 ```
 
