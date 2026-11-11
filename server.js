@@ -52,8 +52,8 @@ app.get("/api/board", (c) => c.json(readBoard()));
 app.put("/api/board", async (c) => {
   const b = await c.req.json().catch(() => null);
   if (!b || typeof b.items !== "object" || !Array.isArray(b.focus) || !Array.isArray(b.list) || !b.day)
-    return c.json({ error: "bad board" }, 400);
-  writeBoard(b);
+    { console.error("rejected board:", JSON.stringify(b)?.slice(0, 300)); return c.json({ error: "bad board" }, 400); }
+  try { writeBoard(b); } catch (e) { console.error("write failed:", e.message); return c.json({ error: e.message }, 500); }
   return c.json({ ok: true });
 });
 app.use("/*", serveStatic({ root: "./public" }));

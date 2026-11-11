@@ -138,16 +138,16 @@ h2{font:600 12px/1 var(--body);text-transform:uppercase;letter-spacing:.09em;col
 
   /* ---------- persistence (SQLite via /api/board) ---------- */
   var ver=0, saved=0, busy=false, timer=null;
-  function setStatus(ok){var el=$("#status");el.hidden=ok;el.textContent=ok?"":"Offline. Changes will save when the server is back."}
+  function setStatus(ok,why){var el=$("#status");el.hidden=ok;el.textContent=ok?"":"Save failed ("+(why||"no response")+"). Retrying."}
   function save(){ver++;clearTimeout(timer);timer=setTimeout(flush,350)}
   async function flush(){
     if(busy){timer=setTimeout(flush,250);return}
-    busy=true;var v=ver,ok=false;
+    busy=true;var v=ver,ok=false,why="";
     try{
       var r=await fetch("/api/board",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify(S)});
-      ok=r.ok;if(ok)saved=v;
-    }catch(e){}
-    busy=false;setStatus(ok);
+      ok=r.ok;if(ok)saved=v;else why="HTTP "+r.status+" "+(await r.text()).slice(0,80);
+    }catch(e){why=String(e&&e.message||e)}
+    busy=false;setStatus(ok,why);
     if(!ok)timer=setTimeout(flush,3000);
     else if(ver!==saved)timer=setTimeout(flush,100);
   }
@@ -213,7 +213,7 @@ h2{font:600 12px/1 var(--body);text-transform:uppercase;letter-spacing:.09em;col
 
   /* ---------- drag and drop ---------- */
   function place(s,id,t){
-    var n={items:s.items,focus:s.focus.slice(),list:s.list.slice()};
+    var n={day:s.day,items:s.items,focus:s.focus.slice(),list:s.list.slice()};
     var fi=n.focus.indexOf(id),li=n.list.indexOf(id);
     if(t.k==="slot"){
       var occ=n.focus[t.i];if(occ===id)return n;
@@ -336,7 +336,7 @@ h2{font:600 12px/1 var(--body);text-transform:uppercase;letter-spacing:.09em;col
       if(d&&d.day&&valid(d)){var n=normalise(d);n.day=d.day;S=n}
       else if(!d||!d.day){S=seed();S.day=today();save()}
       ok=true;
-    }catch(e){setStatus(false)}
+    }catch(e){setStatus(false,"load: "+String(e&&e.message||e))}
     setDate();
     if(ok)rollover();
     render();
