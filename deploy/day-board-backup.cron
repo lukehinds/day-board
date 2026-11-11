@@ -1,0 +1,2 @@
+# /etc/cron.d/day-board-backup : nightly at 02:30, keeps 14 days
+30 2 * * * dayboard cd /opt/day-board && DB_PATH=data/board.db BACKUP_DIR=/var/backups/day-board /usr/bin/node backup.mjs >> /var/log/day-board-backup.log 2>&1

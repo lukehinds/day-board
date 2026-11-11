@@ -4,11 +4,13 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "127.0.0.1"; // local only; set HOST=0.0.0.0 to expose on your network
-mkdirSync("data", { recursive: true });
-const db = new DatabaseSync(process.env.DB_PATH || "data/board.db");
+const DB_PATH = process.env.DB_PATH || "data/board.db";
+mkdirSync(dirname(DB_PATH), { recursive: true });
+const db = new DatabaseSync(DB_PATH);
 db.exec(`
   PRAGMA journal_mode = WAL;
   CREATE TABLE IF NOT EXISTS tasks (

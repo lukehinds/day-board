@@ -1,0 +1,15 @@
+services:
+  day-board:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"   # local only; put your reverse proxy in front
+    volumes:
+      - board-data:/data
+      - ./backups:/backups
+
+volumes:
+  board-data:
+
+# Nightly backup from the host's crontab:
+#   30 2 * * * cd /opt/day-board && docker compose exec -T day-board node backup.mjs

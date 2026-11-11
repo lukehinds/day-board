@@ -1,0 +1,19 @@
+[Unit]
+Description=Day Board
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/day-board
+ExecStart=/usr/bin/node server.js
+Environment=PORT=3000
+Environment=HOST=127.0.0.1
+User=dayboard
+Restart=on-failure
+# Basic hardening; the app only writes to its data directory.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/day-board/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
