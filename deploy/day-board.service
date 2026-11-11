@@ -6,7 +6,7 @@ After=network.target
 WorkingDirectory=/opt/day-board
 ExecStart=/usr/bin/node server.js
 Environment=PORT=3000
-Environment=HOST=127.0.0.1
+Environment=HOST=0.0.0.0
 User=dayboard
 Restart=on-failure
 # Basic hardening; the app only writes to its data directory.

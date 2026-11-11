@@ -29,7 +29,7 @@ There is no login. Keep it on localhost, or put it behind a reverse proxy that h
 docker compose up -d --build
 ```
 
-It listens on `127.0.0.1:3000` only; put your reverse proxy in front. The database lives in the `board-data` volume.
+It listens on port 3000 on all interfaces, so it is reachable on the server's LAN IP and Tailscale IP. The database lives in the `board-data` volume.
 
 ## Deploy with systemd
 
@@ -40,7 +40,13 @@ ssh server 'cd /opt/day-board && npm ci --omit=dev'
 
 Create a `dayboard` user, make `/opt/day-board/data` writable by it, then install `deploy/day-board.service` into `/etc/systemd/system/` and run `systemctl enable --now day-board`.
 
-## Reverse proxy with a login (Caddy)
+## Access and security
+
+The app has no login. Reaching it over your LAN IP (`http://192.168.x.x:3000`) or Tailscale (`http://<tailscale-ip>:3000` or the machine's MagicDNS name) is fine if you trust everyone on those networks. Don't forward the port from your router.
+
+To restrict it to Tailscale only, bind to the Tailscale IP (`HOST=100.x.y.z`, or `"100.x.y.z:3000:3000"` in the compose file). For HTTPS on the tailnet, run `tailscale serve --bg 3000`.
+
+### Optional: reverse proxy with a login (Caddy)
 
 ```
 board.internal.example {

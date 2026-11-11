@@ -3,7 +3,7 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3000:3000"   # local only; put your reverse proxy in front
+      - "3000:3000"   # reachable on the LAN IP and the Tailscale IP
     volumes:
       - board-data:/data
       - ./backups:/backups
