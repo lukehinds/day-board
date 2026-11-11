@@ -66,6 +66,27 @@ board.internal.example {
 
 To restore, stop the server and replace `board.db` with a backup file (delete any `board.db-wal` and `board.db-shm` next to it).
 
+## Command line
+
+`cli.mjs` reads and changes the same board from a terminal. Point it at your server with `BOARD_URL`:
+
+```
+export BOARD_URL=http://192.168.178.121:3000    # put this in your shell profile
+npm link                                         # once, installs the `board` command
+```
+
+```
+board                  show today's board
+board add "Call bank"  add to the top of the quick list
+board focus "Ship it"  new item straight into the first free focus slot
+board focus 2          move list item 2 into the first free focus slot
+board done f1 3        mark focus slot 1 and list item 3 done
+board unfocus f2       send a focus item back to the list
+board rm 4             delete        (also: undo, clear, status --json)
+```
+
+`f1`-`f3` are the focus slots; plain numbers are positions in the quick list. Without `npm link`, run `node cli.mjs` instead of `board`. It applies the same new-day rollover as the page.
+
 ## API
 
 - `GET /api/board` returns `{day, items, focus, list}`.
